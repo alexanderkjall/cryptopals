@@ -141,6 +141,14 @@ pub fn to_base64(data: &[u8]) -> Result<String, Error> {
     Ok(std::str::from_utf8(&output)?.to_string())
 }
 
+pub fn xor(a: &[u8], b: &[u8]) -> Result<Vec<u8>, Error> {
+    if a.len() != b.len() {
+        return Err(Error::Generic("a and b is not equal in length"))
+    }
+
+    Ok(a.iter().zip(b.iter()).map(|(a, b)| a ^ b).collect())
+}
+
 fn main() {
     println!("Hello, world!");
 }
@@ -148,7 +156,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use crate::{parse_hex, to_base64};
+    use crate::{parse_hex, to_base64, xor};
 
     #[test]
     fn parse_hex_test() {
@@ -180,5 +188,11 @@ mod tests {
     fn crypto_pals_challenge1_complete() {
         assert_eq!("SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t",
                    to_base64(&parse_hex("49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d").unwrap()).unwrap());
+    }
+
+    #[test]
+    fn crypto_pals_challenge2_complete() {
+        assert_eq!(parse_hex("746865206b696420646f6e277420706c6179").unwrap(),
+                   xor(&parse_hex("1c0111001f010100061a024b53535009181c").unwrap(), &parse_hex("686974207468652062756c6c277320657965").unwrap()).unwrap());
     }
 }
