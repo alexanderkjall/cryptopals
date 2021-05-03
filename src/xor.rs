@@ -7,3 +7,23 @@ pub fn xor(a: &[u8], b: &[u8]) -> Result<Vec<u8>, Error> {
 
     Ok(a.iter().zip(b.iter()).map(|(a, b)| a ^ b).collect())
 }
+
+pub fn xor_char(a: &[char], b: u32) -> Result<Vec<char>, Error> {
+    Ok(a.iter().map(|a| std::char::from_u32((*a as u32) ^ b).unwrap()).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::xor::{xor, xor_char};
+    use std::char::from_u32;
+
+    #[test]
+    fn xor_test() {
+        assert_eq!(vec![92, 25, 41], xor(&vec![127, 93, 111], &vec![35, 68, 70]).unwrap());
+    }
+
+    #[test]
+    fn xor_char_test() {
+        assert_eq!(vec![from_u32(57).unwrap(), from_u32(27).unwrap(), from_u32(41).unwrap()], xor_char(&vec![from_u32(127).unwrap(), from_u32(93).unwrap(), from_u32(111).unwrap()], 70).unwrap());
+    }
+}
