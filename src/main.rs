@@ -4,17 +4,25 @@ use std::collections::HashMap;
 mod hex;
 mod base64;
 mod xor;
+mod file;
 
 #[derive(Debug)]
 pub enum Error {
     Generic(&'static str),
     GenericStr(String),
     Utf8Error(std::str::Utf8Error),
+    IoError(std::io::Error),
 }
 
 impl From<std::str::Utf8Error> for Error {
     fn from(err: std::str::Utf8Error) -> Error {
         Error::Utf8Error(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::IoError(err)
     }
 }
 
@@ -92,6 +100,25 @@ fn guess_xor_byte(input: &str) -> String {
     xor_char(&input.chars().collect::<Vec<char>>(), lowest_diff_byte).unwrap().into_iter().collect()
 }
 
+fn guess_xor_byte_vec(input: &[String]) -> String {
+    let mut lowest_diff = f64::MAX;
+    let mut result = String::new();
+    for x in 0..input.len() {
+        let xored = guess_xor_byte(&input[x]);
+
+        let percentages = calc_char_percentages(&xored.chars().collect::<Vec<char>>());
+
+        let diff = calc_percentage_diff(percentages);
+
+        if diff < lowest_diff {
+            lowest_diff = diff;
+            result = xored;
+        }
+    }
+
+    result
+}
+
 
 fn main() {
     println!("Hello, world!");
@@ -101,8 +128,9 @@ fn main() {
 mod tests {
     use crate::hex::parse_hex;
     use crate::base64::to_base64;
+    use crate::file::file_to_vec;
     use crate::xor::xor;
-    use crate::{guess_xor_byte, calc_char_percentages};
+    use crate::{guess_xor_byte, calc_char_percentages, guess_xor_byte_vec};
     use std::collections::HashMap;
 
     #[test]
@@ -137,5 +165,13 @@ mod tests {
     fn crypto_pals_challenge3_complete() {
         assert_eq!("Cooking MC's like a pound of bacon",
                    guess_xor_byte(&std::str::from_utf8(&parse_hex("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736").unwrap()).unwrap()));
+    }
+
+    #[test]
+    fn crypto_pals_challenge4_complete() {
+        assert_eq!("Now that the party is jumping\n",
+                   &guess_xor_byte_vec(
+                       &file_to_vec("res/4.txt").unwrap().iter()
+                           .map(|s| String::from_utf8_lossy(&parse_hex(s).unwrap()).to_string()).collect::<Vec<String>>()));
     }
 }
