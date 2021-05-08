@@ -103,8 +103,8 @@ fn guess_xor_byte(input: &str) -> String {
 fn guess_xor_byte_vec(input: &[String]) -> String {
     let mut lowest_diff = f64::MAX;
     let mut result = String::new();
-    for x in 0..input.len() {
-        let xored = guess_xor_byte(&input[x]);
+    for inp in input {
+        let xored = guess_xor_byte(inp);
 
         let percentages = calc_char_percentages(&xored.chars().collect::<Vec<char>>());
 

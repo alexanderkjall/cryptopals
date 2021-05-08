@@ -71,21 +71,21 @@ fn map_base64(c: u8) -> Result<u8, Error> {
 }
 
 fn extract_bits(b1: u8, b2: u8, b3: u8) -> Result<[u8; 4], Error> {
-    Ok([map_base64(b1.clone() >> 2)?,
-        map_base64((b1 & 0b00000011) << 4 | (b2.clone() & 0b11110000) >> 4)?,
-        map_base64((b2 & 0b00001111) << 2 | (b3.clone() & 0b11000000) >> 6)?,
+    Ok([map_base64(b1 >> 2)?,
+        map_base64((b1 & 0b00000011) << 4 | (b2 & 0b11110000) >> 4)?,
+        map_base64((b2 & 0b00001111) << 2 | (b3 & 0b11000000) >> 6)?,
         map_base64(b3 & 0b00111111)?])
 }
 
 fn remainder_2(b1: u8, b2: u8) -> Result<[u8; 4], Error> {
-    Ok([map_base64(b1.clone() >> 2)?,
-        map_base64((b1 & 0b00000011) << 4 | (b2.clone() & 0b11110000) >> 4)?,
+    Ok([map_base64(b1 >> 2)?,
+        map_base64((b1 & 0b00000011) << 4 | (b2 & 0b11110000) >> 4)?,
         map_base64((b2 & 0b00001111) << 2)?,
         b'='])
 }
 
 fn remainder_1(b1: u8) -> Result<[u8; 4], Error> {
-    Ok([map_base64(b1.clone() >> 2)?,
+    Ok([map_base64(b1 >> 2)?,
         map_base64((b1 & 0b00000011) << 4)?,
         b'=',
         b'='])
