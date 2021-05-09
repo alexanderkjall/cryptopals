@@ -126,10 +126,10 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use crate::hex::parse_hex;
+    use crate::hex::{parse_hex, to_hex};
     use crate::base64::to_base64;
     use crate::file::file_to_vec;
-    use crate::xor::xor;
+    use crate::xor::{xor, xor_repeat};
     use crate::{guess_xor_byte, calc_char_percentages, guess_xor_byte_vec};
     use std::collections::HashMap;
 
@@ -173,5 +173,13 @@ mod tests {
                    &guess_xor_byte_vec(
                        &file_to_vec("res/4.txt").unwrap().iter()
                            .map(|s| String::from_utf8_lossy(&parse_hex(s).unwrap()).to_string()).collect::<Vec<String>>()));
+    }
+
+    #[test]
+    fn crypto_pals_challenge5_complete() {
+        assert_eq!("0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a26226324272765272\
+a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f",
+            to_hex(&xor_repeat(&"Burning 'em, if you ain't quick and nimble
+I go crazy when I hear a cymbal".bytes().collect::<Vec<u8>>(), &vec![b'I', b'C', b'E']).unwrap()));
     }
 }

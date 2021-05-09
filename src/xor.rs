@@ -12,14 +12,29 @@ pub fn xor_char(a: &[char], b: u32) -> Result<Vec<char>, Error> {
     Ok(a.iter().map(|a| std::char::from_u32((*a as u32) ^ b).unwrap()).collect())
 }
 
+pub fn xor_repeat(a: &[u8], b: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut result = Vec::new();
+    result.resize(a.len(), 0);
+    for i in 0..a.len() {
+        result[i] = a[i] ^ b[i % b.len()];
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::xor::{xor, xor_char};
+    use crate::xor::{xor, xor_char, xor_repeat};
     use std::char::from_u32;
 
     #[test]
     fn xor_test() {
         assert_eq!(vec![92, 25, 41], xor(&vec![127, 93, 111], &vec![35, 68, 70]).unwrap());
+    }
+
+    #[test]
+    fn xor_repeat_test() {
+        assert_eq!(vec![92, 25, 41], xor_repeat(&vec![127, 93, 111, 93, 111],
+                                                &vec![35, 68, 70]).unwrap());
     }
 
     #[test]

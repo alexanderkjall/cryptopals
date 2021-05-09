@@ -1,4 +1,5 @@
 use crate::Error;
+use std::fmt::Write;
 
 fn val(c: u8, idx: usize) -> Result<u8, Error> {
     match c {
@@ -23,10 +24,17 @@ pub fn parse_hex(hex: &str) -> Result<Vec<u8>, Error> {
         .collect()
 }
 
+pub fn to_hex(input: &[u8]) -> String {
+    let mut s = String::new();
+    for v in input {
+        write!(s, "{:02x}", *v).unwrap();
+    }
+    s
+}
 
 #[cfg(test)]
 mod tests {
-    use crate::hex::parse_hex;
+    use crate::hex::{parse_hex, to_hex};
 
     #[test]
     fn parse_hex_test() {
@@ -36,5 +44,10 @@ mod tests {
     #[test]
     fn parse_hex_uneven_test() {
         assert_eq!(vec![1, 2, 3], parse_hex("10203").unwrap());
+    }
+
+    #[test]
+    fn to_hex_test() {
+        assert_eq!("010203", to_hex(&vec![1, 2, 3]));
     }
 }
