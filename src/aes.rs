@@ -13,7 +13,8 @@ unsafe fn aes_128_key_expansion(key: __m128i, keygened: __m128i) -> __m128i {
     let key = _mm_xor_si128(key, _mm_slli_si128(key, 4));
     let key = _mm_xor_si128(key, _mm_slli_si128(key, 4));
     let key = _mm_xor_si128(key, _mm_slli_si128(key, 4));
-    return _mm_xor_si128(key, keygened);
+
+    _mm_xor_si128(key, keygened)
 }
 
 unsafe fn aes128_load_key(enc_key: &[u8; 16], key_schedule: &mut [__m128i; 20]) {
@@ -52,47 +53,125 @@ pub fn decrypt_aes_ecb(input: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
         aes128_load_key(key, &mut key_schedule);
 
         for i in 0..(input.len() / 16) {
-            let mut m = _mm_loadu_si128((input.as_ptr() as *const __m128i).offset(i as isize));
+            let mut m = _mm_loadu_si128((input.as_ptr() as *const __m128i).add(i));
 
-            m = _mm_xor_si128(m, key_schedule[10 + 0]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 1]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 2]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 3]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 4]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 5]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 6]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 7]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 8]);
-            m = _mm_aesdec_si128(m, key_schedule[10 + 9]);
+            m = _mm_xor_si128(m, key_schedule[10]);
+            m = _mm_aesdec_si128(m, key_schedule[11]);
+            m = _mm_aesdec_si128(m, key_schedule[12]);
+            m = _mm_aesdec_si128(m, key_schedule[13]);
+            m = _mm_aesdec_si128(m, key_schedule[14]);
+            m = _mm_aesdec_si128(m, key_schedule[15]);
+            m = _mm_aesdec_si128(m, key_schedule[16]);
+            m = _mm_aesdec_si128(m, key_schedule[17]);
+            m = _mm_aesdec_si128(m, key_schedule[18]);
+            m = _mm_aesdec_si128(m, key_schedule[19]);
             m = _mm_aesdeclast_si128(m, key_schedule[0]);
 
-            _mm_storeu_si128((plain_text.as_ptr() as *mut __m128i).offset(i as isize), m);
+            _mm_storeu_si128((plain_text.as_ptr() as *mut __m128i).add(i), m);
         }
     }
 
-    find_and_remove_padding(&mut plain_text);
+    remove_padding(&mut plain_text)?;
 
     Ok(plain_text)
 }
 
-fn find_and_remove_padding(plain_text: &mut Vec<u8>) {
-    if plain_text.len() == 0 {
-        return;
+fn remove_padding(plain_text: &mut Vec<u8>) -> Result<(), Error> {
+    if plain_text.is_empty() {
+        return Err(Error::Generic("empty buffer, not padded"));
+    }
+    if plain_text.len() % 16 != 0 {
+        return Err(Error::Generic("buffer not padded to 16"));
     }
 
-    if plain_text[plain_text.len() - 1] < 17 {
+    if plain_text[plain_text.len() - 1] < 17 && plain_text[plain_text.len() - 1] != 0 {
         let pad_byte = plain_text[plain_text.len() - 1];
 
         if (plain_text.len() as i32) - (pad_byte as i32) < 0 {
-            return;
+            return Err(Error::Generic("pad byte wrong"));
         }
 
         for i in 1..(pad_byte + 1) {
             if plain_text[plain_text.len() - i as usize] != pad_byte {
-                return;
+                return Err(Error::Generic("pad byte wrong"));
             }
         }
 
         plain_text.resize(plain_text.len() - pad_byte as usize, 0u8);
+    } else {
+        return Err(Error::Generic("pad byte wrong"));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::aes::remove_padding;
+    use crate::Error;
+
+    #[test]
+    fn remove_padding_test_valid() {
+        for length in 0..17 {
+            let a = vec![length as u8; length];
+
+            let mut a_padded = a.clone();
+            a_padded.append(&mut vec![16 - (length % 16) as u8; 16 - (length % 16)]);
+
+            remove_padding(&mut a_padded).unwrap();
+
+            assert_eq!(a, a_padded);
+        }
+    }
+
+    #[test]
+    fn remove_padding_test_empty_buf() {
+        let mut a = vec![];
+
+        let result = remove_padding(&mut a);
+
+        let result = result.err().unwrap();
+        assert!(matches!(result, Error::Generic("empty buffer, not padded")));
+    }
+
+    #[test]
+    fn remove_padding_test_wrong_length() {
+        let mut a = vec![3; 5];
+
+        let result = remove_padding(&mut a);
+
+        let result = result.err().unwrap();
+        assert!(matches!(result, Error::Generic("buffer not padded to 16")));
+    }
+
+    #[test]
+    fn remove_padding_test_not_padded() {
+        let mut a = vec![20; 16];
+
+        let result = remove_padding(&mut a);
+
+        let result = result.err().unwrap();
+        assert!(matches!(result, Error::Generic("pad byte wrong")));
+    }
+
+    #[test]
+    fn remove_padding_test_not_padded_zero() {
+        let mut a = vec![0; 16];
+
+        let result = remove_padding(&mut a);
+
+        let result = result.err().unwrap();
+        assert!(matches!(result, Error::Generic("pad byte wrong")));
+    }
+
+    #[test]
+    fn remove_padding_test_not_padded_matching_last_byte() {
+        let mut a = vec![3; 16];
+        a[15] = 5;
+
+        let result = remove_padding(&mut a);
+
+        let result = result.err().unwrap();
+        assert!(matches!(result, Error::Generic("pad byte wrong")));
     }
 }
