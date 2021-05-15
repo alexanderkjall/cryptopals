@@ -76,6 +76,20 @@ pub fn decrypt_aes_ecb(input: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
     Ok(plain_text)
 }
 
+pub fn add_padding(plain_text: &mut Vec<u8>, block_size: usize) -> Result<(), Error> {
+    if block_size == 0 {
+        return Err(Error::Generic("block size must be > 0"));
+    }
+
+    let nr_of_bytes_to_extend = match plain_text.len() % block_size {
+        0 => block_size,
+        i => block_size - i
+    };
+    plain_text.extend(&vec![nr_of_bytes_to_extend as u8; nr_of_bytes_to_extend]);
+
+    Ok(())
+}
+
 fn remove_padding(plain_text: &mut Vec<u8>) -> Result<(), Error> {
     if plain_text.is_empty() {
         return Err(Error::Generic("empty buffer, not padded"));
@@ -107,7 +121,7 @@ fn remove_padding(plain_text: &mut Vec<u8>) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::aes::remove_padding;
+    use crate::aes::{remove_padding, add_padding};
     use crate::Error;
 
     #[test]
@@ -117,6 +131,20 @@ mod tests {
 
             let mut a_padded = a.clone();
             a_padded.append(&mut vec![16 - (length % 16) as u8; 16 - (length % 16)]);
+
+            remove_padding(&mut a_padded).unwrap();
+
+            assert_eq!(a, a_padded);
+        }
+    }
+
+    #[test]
+    fn add_and_remove_padding_test_valid() {
+        for length in 0..17 {
+            let a = vec![length as u8; length];
+
+            let mut a_padded = a.clone();
+            add_padding(&mut a_padded, 16).unwrap();
 
             remove_padding(&mut a_padded).unwrap();
 
