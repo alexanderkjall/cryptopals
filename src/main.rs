@@ -35,20 +35,61 @@ impl From<std::io::Error> for Error {
     }
 }
 
+fn number_of_duplicate_blocks(input: &[u8], key_size: usize) -> Result<usize, Error> {
+    let mut parts = vec![];
+    for i in 0..(input.len() / (key_size * 2)) {
+        parts.push(&input[(i * key_size)..((i + 1) * key_size)]);
+    }
+    let mut adds = 0;
+    for i in 0..parts.len() {
+        for j in (i + 1)..parts.len() {
+            if parts[i] == parts[j] {
+                adds += 1;
+            }
+        }
+    }
+    Ok(adds)
+}
+
+fn score_edit_distance(input: &[u8], key_size: usize) -> Result<f64, Error> {
+    let mut edit_delta = 0;
+    let mut parts = vec![];
+    for i in 0..(input.len() / (key_size * 2)) {
+        parts.push(&input[(i * key_size)..((i + 1) * key_size)]);
+    }
+    let mut adds = 0;
+    for i in 0..parts.len() {
+        for j in (i + 1)..parts.len() {
+            edit_delta += hamming_distance(parts[i], parts[j])?;
+            adds += 1;
+        }
+    }
+
+    Ok(edit_delta as f64 / (key_size * adds) as f64)
+}
+
 fn calc_edit_distance(input: &[u8]) -> Result<Vec<(f64, u8)>, Error> {
     let mut edit_deltas: Vec<(f64, u8)> = vec![];
     for key_size in 2..min(40, input.len() / 2) {
-        let mut edit_delta = 0;
-        for i in 0..(input.len() / (key_size * 2)) {
-            edit_delta += hamming_distance(&input[(i * key_size)..((i + 1) * key_size)], &input[((i + 1) * key_size)..((i + 2) * key_size)])?;
-        }
-
-        edit_deltas.push((edit_delta as f64 / (input.len() / 2) as f64, key_size as u8));
+        edit_deltas.push((score_edit_distance(input, key_size)?, key_size as u8));
     }
 
     edit_deltas.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
 
     Ok(edit_deltas)
+}
+
+fn score_edit_distance_16(input: &[Vec<u8>]) -> Result<usize, Error> {
+    let mut edit_deltas: Vec<(usize, usize)> = vec![];
+    for (i, buf) in input.iter().enumerate() {
+        if !buf.is_empty() {
+            edit_deltas.push((number_of_duplicate_blocks(&buf, 16)?, i));
+        }
+    }
+
+    edit_deltas.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+
+    Ok(edit_deltas[0].1)
 }
 
 fn decrypt_buf(input: &[u8]) -> Result<Vec<u8>, Error> {
@@ -177,6 +218,20 @@ fn solve_1_7() -> Result<(), Error> {
     Ok(())
 }
 
+fn solve_1_8() -> Result<(), Error> {
+    let expected = 132;
+
+    let f:Vec<Vec<u8>> = file_to_vec("res/8.txt")?.iter().map(|s| parse_hex(&s)).collect::<Result<Vec<Vec<u8>>, Error>>()?;
+
+    let result = score_edit_distance_16(&f)?;
+
+    assert_eq!(expected, result);
+
+    println!("exp = {}\nres = {}", expected, result);
+
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -206,6 +261,9 @@ fn main() {
         },
         "1.7" => {
             solve_1_7().unwrap();
+        },
+        "1.8" => {
+            solve_1_8().unwrap();
         },
         _ => {
             eprintln!("unknown argument")
