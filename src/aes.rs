@@ -1,5 +1,5 @@
 use crate::Error;
-use std::arch::x86_64::{__m128i, _mm_loadu_si128, _mm_xor_si128, _mm_aesdec_si128, _mm_aesdeclast_si128, _mm_storeu_si128, _mm_aeskeygenassist_si128, _mm_shuffle_epi32, _mm_slli_si128, _mm_aesimc_si128, _mm_setzero_si128};
+use std::arch::x86_64::{__m128i, _mm_loadu_si128, _mm_xor_si128, _mm_aesdec_si128, _mm_aesdeclast_si128, _mm_storeu_si128, _mm_aeskeygenassist_si128, _mm_shuffle_epi32, _mm_slli_si128, _mm_aesimc_si128, _mm_setzero_si128, _mm_aesenc_si128, _mm_aesenclast_si128, _mm_set_epi8};
 
 /// copied here from sse.rs so that we can run this in stable rust
 #[inline]
@@ -76,6 +76,84 @@ pub fn decrypt_aes_ecb(input: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
     Ok(plain_text)
 }
 
+pub fn decrypt_aes_cbc(input: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> Result<Vec<u8>, Error> {
+    if input.len() % 16 != 0 {
+        return Err(Error::Generic("block size isn't 16"))
+    }
+
+    let mut plain_text:Vec<u8> = vec![0u8; input.len()];
+    unsafe {
+        let iv: __m128i = _mm_set_epi8(iv[0] as i8, iv[1] as i8, iv[2] as i8, iv[3] as i8, iv[4] as i8, iv[5] as i8, iv[6] as i8, iv[7] as i8, iv[8] as i8, iv[9] as i8, iv[10] as i8, iv[11] as i8, iv[12] as i8, iv[13] as i8, iv[14] as i8, iv[15] as i8);
+        let mut key_schedule: [__m128i; 20] = [_mm_setzero_si128(); 20];
+
+        aes128_load_key(key, &mut key_schedule);
+
+        for i in 0..(input.len() / 16) {
+            let mut m = _mm_loadu_si128((input.as_ptr() as *const __m128i).add(i));
+
+            m = _mm_xor_si128(m, key_schedule[10]);
+            m = _mm_aesdec_si128(m, key_schedule[11]);
+            m = _mm_aesdec_si128(m, key_schedule[12]);
+            m = _mm_aesdec_si128(m, key_schedule[13]);
+            m = _mm_aesdec_si128(m, key_schedule[14]);
+            m = _mm_aesdec_si128(m, key_schedule[15]);
+            m = _mm_aesdec_si128(m, key_schedule[16]);
+            m = _mm_aesdec_si128(m, key_schedule[17]);
+            m = _mm_aesdec_si128(m, key_schedule[18]);
+            m = _mm_aesdec_si128(m, key_schedule[19]);
+            m = _mm_aesdeclast_si128(m, key_schedule[0]);
+
+            match i {
+                0 => m = _mm_xor_si128(m, iv),
+                _ => m = _mm_xor_si128(m, *(input.as_ptr() as * const __m128i).add(i - 1)),
+            }
+
+            _mm_storeu_si128((plain_text.as_ptr() as *mut __m128i).add(i), m);
+        }
+    }
+
+    remove_padding(&mut plain_text)?;
+
+    Ok(plain_text)
+}
+
+pub fn encrypt_aes_cbc(input: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> Result<Vec<u8>, Error> {
+    let mut input = input.to_vec();
+    add_padding(&mut input, 16)?;
+
+    let mut cipher_text:Vec<u8> = vec![0u8; input.len()];
+    for (i, b) in iv.iter().enumerate() {
+        cipher_text[i] = *b;
+    }
+    unsafe {
+        let mut key_schedule: [__m128i; 20] = [_mm_setzero_si128(); 20];
+
+        aes128_load_key(key, &mut key_schedule);
+
+        for i in 0..(input.len() / 16) {
+            let mut m = _mm_loadu_si128((input.as_ptr() as *const __m128i).add(i));
+
+            m = _mm_xor_si128(m, *(cipher_text.as_ptr() as *const __m128i).add(match i { 0..=1 => 0, _ => i - 1}));
+
+            m = _mm_xor_si128(m, key_schedule[0]);
+            m = _mm_aesenc_si128(m, key_schedule[1]);
+            m = _mm_aesenc_si128(m, key_schedule[2]);
+            m = _mm_aesenc_si128(m, key_schedule[3]);
+            m = _mm_aesenc_si128(m, key_schedule[4]);
+            m = _mm_aesenc_si128(m, key_schedule[5]);
+            m = _mm_aesenc_si128(m, key_schedule[6]);
+            m = _mm_aesenc_si128(m, key_schedule[7]);
+            m = _mm_aesenc_si128(m, key_schedule[8]);
+            m = _mm_aesenc_si128(m, key_schedule[9]);
+            m = _mm_aesenclast_si128(m, key_schedule[10]);
+
+            _mm_storeu_si128((cipher_text.as_ptr() as *mut __m128i).add(i), m);
+        }
+    }
+
+    Ok(cipher_text)
+}
+
 pub fn add_padding(plain_text: &mut Vec<u8>, block_size: usize) -> Result<(), Error> {
     if block_size == 0 {
         return Err(Error::Generic("block size must be > 0"));
@@ -121,8 +199,21 @@ fn remove_padding(plain_text: &mut Vec<u8>) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::aes::{remove_padding, add_padding};
+    use crate::aes::{remove_padding, add_padding, encrypt_aes_cbc, decrypt_aes_cbc};
     use crate::Error;
+
+    #[test]
+    fn cbc_loop() {
+        let key = [b'a', b'b', b'c', b'd', b'e', b'f', b'g', b'h', b'i', b'j', b'k', b'l', b'm', b'o', b'p', b'q'];
+        let clean = "Quisque eget odio ac lectus vestibulum faucibus eget.";
+
+        let enc = encrypt_aes_cbc(clean.as_bytes(), &key, &[0; 16]).unwrap();
+        let result = decrypt_aes_cbc(&enc, &key, &[0; 16]).unwrap();
+
+        let result = String::from_utf8(result).unwrap();
+
+        assert_eq!(clean, result);
+    }
 
     #[test]
     fn remove_padding_test_valid() {
