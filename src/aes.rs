@@ -1,6 +1,11 @@
 use crate::Error;
 use std::arch::x86_64::{__m128i, _mm_loadu_si128, _mm_xor_si128, _mm_aesdec_si128, _mm_aesdeclast_si128, _mm_storeu_si128, _mm_aeskeygenassist_si128, _mm_shuffle_epi32, _mm_slli_si128, _mm_aesimc_si128, _mm_setzero_si128, _mm_aesenc_si128, _mm_aesenclast_si128, _mm_set_epi8};
 
+pub enum AES_METHOD {
+    ECB,
+    CBC,
+}
+
 /// copied here from sse.rs so that we can run this in stable rust
 #[inline]
 #[allow(non_snake_case)]
@@ -39,6 +44,38 @@ unsafe fn aes128_load_key(enc_key: &[u8; 16], key_schedule: &mut [__m128i; 20]) 
     key_schedule[17] = _mm_aesimc_si128(key_schedule[3]);
     key_schedule[18] = _mm_aesimc_si128(key_schedule[2]);
     key_schedule[19] = _mm_aesimc_si128(key_schedule[1]);
+}
+
+pub fn encrypt_aes_ebc(input: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {
+    let mut input = input.to_vec();
+    add_padding(&mut input, 16)?;
+
+    let mut cipher_text:Vec<u8> = vec![0u8; input.len()];
+    unsafe {
+        let mut key_schedule: [__m128i; 20] = [_mm_setzero_si128(); 20];
+
+        aes128_load_key(key, &mut key_schedule);
+
+        for i in 0..(input.len() / 16) {
+            let mut m = _mm_loadu_si128((input.as_ptr() as *const __m128i).add(i));
+
+            m = _mm_xor_si128(m, key_schedule[0]);
+            m = _mm_aesenc_si128(m, key_schedule[1]);
+            m = _mm_aesenc_si128(m, key_schedule[2]);
+            m = _mm_aesenc_si128(m, key_schedule[3]);
+            m = _mm_aesenc_si128(m, key_schedule[4]);
+            m = _mm_aesenc_si128(m, key_schedule[5]);
+            m = _mm_aesenc_si128(m, key_schedule[6]);
+            m = _mm_aesenc_si128(m, key_schedule[7]);
+            m = _mm_aesenc_si128(m, key_schedule[8]);
+            m = _mm_aesenc_si128(m, key_schedule[9]);
+            m = _mm_aesenclast_si128(m, key_schedule[10]);
+
+            _mm_storeu_si128((cipher_text.as_ptr() as *mut __m128i).add(i), m);
+        }
+    }
+
+    Ok(cipher_text)
 }
 
 pub fn decrypt_aes_ecb(input: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, Error> {

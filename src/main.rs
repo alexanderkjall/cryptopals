@@ -6,7 +6,8 @@ use crate::file::{file_to_vec, file_to_buf};
 use crate::string::{hamming_distance, trim_and_join};
 use std::str::from_utf8;
 use std::cmp::min;
-use crate::aes::{decrypt_aes_ecb, add_padding, decrypt_aes_cbc};
+use crate::aes::{decrypt_aes_ecb, add_padding, decrypt_aes_cbc, encrypt_aes_cbc, encrypt_aes_ebc, AES_METHOD};
+use rand::Rng;
 
 mod aes;
 mod hex;
@@ -124,6 +125,32 @@ fn chop_and_transpose(input: &[u8], block_size: usize) -> Vec<Vec<u8>> {
         out.push(v);
     }
     out
+}
+
+fn encrypt_randomly(input: &str) -> Result<(AES_METHOD, Vec<u8>), Error> {
+    let mut rng = rand::thread_rng();
+
+    let random_key: [u8; 16] = [rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen()];
+
+    let mut padded_input = vec![];
+    for _ in 0..rng.gen_range(5..=10) {
+        padded_input.push(rng.gen());
+    }
+    padded_input.extend(input.as_bytes());
+    for _ in 0..rng.gen_range(5..=10) {
+        padded_input.push(rng.gen());
+    }
+
+    if rng.gen_range(0..=1) == 0 {
+        Ok((AES_METHOD::ECB, encrypt_aes_ebc(&padded_input, &random_key)?))
+    } else {
+        let random_iv: [u8; 16] = [rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen()];
+
+        Ok((AES_METHOD::CBC, encrypt_aes_cbc(&padded_input, &random_key, &random_iv)?))
+    }
+}
+
+fn detect_aes_ecb_vs_cbc(input: &[u8]) -> Result<AES_METHOD, Error> {
 }
 
 fn solve_1_1() -> Result<(), Error> {
@@ -260,6 +287,33 @@ fn solve_2_10() -> Result<(), Error> {
 
     Ok(())
 }
+
+fn solve_2_11() -> Result<(), Error> {
+    let input = "William Birney was born May 28, 1819, on his father's plantation near Huntsville, Alabama.[1] He grew up there and in Danville, Kentucky. Birney was educated at Centre College and Yale University and he practiced law in Cincinnati, Ohio.[1] He then lived for five years in Europe, primarily on the Continent and in England. For two years, he was a professor of English literature at the college in Bourges. He took an active part in the revolutionary movement in France in 1848. He later wrote numerous articles for English and American newspapers. Returning to the United States in 1853, Birney established a newspaper, the Daily Register, in Philadelphia.[citation needed]
+
+At the outbreak of the Civil War, Birney entered the Union Army on May 22, 1861 as a captain in the 1st New Jersey Infantry Regiment.[1] He first saw combat in the First Battle of Bull Run. Promoted to major of the 4th New Jersey Volunteer Infantry, he participated in the battles of Second Bull Run, Chantilly, Fredericksburg, and, as a colonel, Chancellorsville. In 1863–64, he was appointed as one of three superintendents in charge of enlisting colored troops into the Union army, and in that capacity organized seven regiments. He was named Colonel of the 22nd U.S. Colored Troops. On June 9, 1863, he was commissioned as a brigadier general of volunteers, to rank from May 22, 1863, and assigned to Maryland to recruit more black troops.[2][3] In 1864, he marched his regiments to fight in South Carolina as a part of the Department of the South. They fared poorly, but did much better work in campaigns in Florida, including the Battle of Olustee.[citation needed]
+Charge of Gen. Birney's troops
+
+Birney's brigade was transferred to Virginia and joined other black regiments to form the Third Division of the X Corps under the command of Maj. Gen. Benjamin F. Butler. They suffered a serious defeat at the Battle of Chaffin's Farm, but were instrumental in several fights along the defenses of Richmond. In December 1864, the X Corps black regiments were combined with those of the XVIII Corps in the new all-black XXV Corps under Maj. Gen. Godfrey Weitzel. Birney's regiments became the 2nd Division of the XXV Corps, and participated in the last assaults during the Siege of Petersburg in early 1865. He then led his division in the pursuit of Robert E. Lee's Army of Northern Virginia during the Appomattox Campaign. Birney was mustered out of the volunteer army on August 24, 1865.[2]
+
+On July 20, 1866, President of the United States Andrew Johnson nominated Birney for appointment to the grade of brevet major general of volunteers to rank from March 13, 1865 and the United States Senate confirmed the appointment on July 26, 1866.[4]
+
+Birney resided in Florida for several years after the war before moving north in 1874 to establish a law practice in Washington, D.C..[5] He served as U.S. Attorney for the District of Columbia and as a school board trustee until 1886. He wrote profusely on the subjects of religion and history and authored a biography of his father, James G. Birney and His Times; the Genesis of the Republican Party, in 1890.[6][7]
+
+Birney died at his home in Forest Glen, Maryland on August 14, 1907, and was buried in the Oak Hill Cemetery in Georgetown (Washington, D.C.).[1] ";
+
+
+    let (answer, cipher) = encrypt_randomly(input)?;
+
+    let result = detect_aes_ecb_vs_cbc(&cipher)?;
+
+    assert_eq!(expected, result);
+
+    println!("exp = {}\nres = {}", expected, result);
+
+    Ok(())
+}
+
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
